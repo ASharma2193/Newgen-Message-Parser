@@ -490,7 +490,7 @@ class JT1078Parser:
                 mcc = int.from_bytes(data[pos:pos+2], byteorder='big')
                 mnc = int.from_bytes(data[pos+2:pos+4], byteorder='big')
                 ci = int.from_bytes(data[pos+4:pos+8], byteorder='big')
-                lac = int.from_bytes(data[pos+8:pos+10], byteorder='big')
+                lac = int.from_bytes(data[pos+8:pos+12], byteorder='big')
                 rssi = data[pos+12]  # RSSI is at position 12
                 
                 base_stations.append({
