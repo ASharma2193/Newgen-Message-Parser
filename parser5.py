@@ -545,7 +545,8 @@ class JT1078Parser:
         
         if (mask & 0x04) and pos + 2 <= len(data):  # Humidity
             result['humidity'] = int.from_bytes(data[pos:pos+2], byteorder='big') / 10.0
-
+            pos += 2
+            
         if (mask & 0x08) and pos + 6 <= len(data):  # Accelerometer (6 bytes)
 
             # Parse accelerometer data (X, Y, Z axes, each 2 bytes)
