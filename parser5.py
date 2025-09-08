@@ -63,7 +63,8 @@ class JT1078Parser:
             "Message Type", "Device ID", "Sequence Number", "Response Sequence", 
             "Total Parameters", "Parameters", "Data Type", "GNSS Fixed", 
             "Latitude", "Longitude", "Time",
-            "CSQ", "GPS Satellites", "Base Station", "WiFi APs", "Firmware",
+            "CSQ", "GPS Satellites", "Base Station", "WiFi APs", "Firmware", "Trigger Event", "Acc: X", "Acc: Y", 
+            "Acc: Z",
             "Light", "Temperature", "Humidity", "Battery Voltage", "Battery Percentage",
             "Battery Status", "Sampling Interval", "Reporting Interval"
         ]
@@ -507,9 +508,26 @@ class JT1078Parser:
         """Parse sensor information"""
         if len(data) < 2:
             return {}
+
+         # Parse trigger event type
+
+        trigger_event_type = data[0]
+        trigger_events = {
+            0: "Periodic sampling",
+            1: "Low battery trigger event",
+            2: "Motion trigger event",
+            3: "Shock trigger event",
+            4: "Light trigger event",
+            5: "Over temperature and humidity trigger",
+            6: "Over temperature trigger",
+            7: "Over humidity trigger",
+            8: "Reserved",
+            9: "Bluetooth sensor connection trigger"
+        }
         
         result = {
-            'trigger_event_type': data[0],
+            'trigger_event_type': trigger_event_type,
+            'trigger_event_name': trigger_events.get(trigger_event_type, "Unknown"),
             'sensor_field_mask': data[1],
         }
         
@@ -527,7 +545,56 @@ class JT1078Parser:
         
         if (mask & 0x04) and pos + 2 <= len(data):  # Humidity
             result['humidity'] = int.from_bytes(data[pos:pos+2], byteorder='big') / 10.0
+
+        if (mask & 0x08) and pos + 6 <= len(data):  # Accelerometer (6 bytes)
+
+            # Parse accelerometer data (X, Y, Z axes, each 2 bytes)
+
+            accel_x = int.from_bytes(data[pos:pos+2], byteorder='big', signed=True)
+            accel_y = int.from_bytes(data[pos+2:pos+4], byteorder='big', signed=True)
+            accel_z = int.from_bytes(data[pos+4:pos+6], byteorder='big', signed=True)
+
+            result['accelerometer'] = {
+                'x': accel_x,
+                'y': accel_y,
+                'z': accel_z
+            }
+
+            pos += 6
+
+        
+
+        if (mask & 0x10) and pos + 10 <= len(data):  # Limit (10 bytes)
+
+            # Parse limit values: Light, Tmax, Tmin, Hmax, Hmin (each 2 bytes)
+
+            result['limits'] = {
+                'light': int.from_bytes(data[pos:pos+2], byteorder='big'),
+                'temp_max': int.from_bytes(data[pos+2:pos+4], byteorder='big', signed=True) / 10.0,
+                'temp_min': int.from_bytes(data[pos+4:pos+6], byteorder='big', signed=True) / 10.0,
+                'humidity_max': int.from_bytes(data[pos+6:pos+8], byteorder='big') / 10.0,
+                'humidity_min': int.from_bytes(data[pos+8:pos+10], byteorder='big') / 10.0
+            }
+
+            pos += 10
+
+        
+
+        if (mask & 0x20) and pos + 2 <= len(data):  # Barometric pressure (2 bytes)
+            result['barometric_pressure'] = int.from_bytes(data[pos:pos+2], byteorder='big') / 10.0
             pos += 2
+
+        
+
+        if (mask & 0x40) and pos + 2 <= len(data):  # Reserved 2 (2 bytes)
+            result['reserved2'] = int.from_bytes(data[pos:pos+2], byteorder='big')
+            pos += 2
+
+
+        if (mask & 0x80) and pos + 2 <= len(data):  # Reserved 3 (2 bytes)
+            result['reserved3'] = int.from_bytes(data[pos:pos+2], byteorder='big')
+            pos += 2    
+        
         
         return result
     
@@ -672,6 +739,7 @@ def main():
            - 0x0104: Device Command Response(ACK)
         6. In parsed messages:
            - Time: Format is "UTC"
+           - Accelerometer: X,Y,Z Values are in mG
            - Light: Value in "mV"
            - Temperature: In "°C"
            - Humidity: In "%"  
@@ -757,9 +825,25 @@ def main():
                     row['WiFi APs'] = " | ".join(wifi_info)
                     if len(wifi_list) > 2:
                         row['WiFi APs'] += f" (+{len(wifi_list)-2} more)"
+                        
                 
                 # Other extension fields
                 row['Firmware'] = ext.get('firmware', 'N/A')
+
+                row['Trigger Event'] = sensor.get('trigger_event_name', 'N/A')
+
+                # Add accelerometer information
+
+                accelerometer = sensor.get('accelerometer', {})
+                if accelerometer:
+                    row['Acc: X'] = accelerometer.get('x', 'N/A')
+                    row['Acc: Y'] = accelerometer.get('y', 'N/A')
+                    row['Acc: Z'] = accelerometer.get('z', 'N/A')
+                else:
+                    row['Acc: X'] = 'N/A'
+                    row['Acc: Y'] = 'N/A'
+                    row['Acc: Z'] = 'N/A'
+                
                 row['Light'] = sensor.get('light', 'N/A')
                 row['Temperature'] = sensor.get('temperature', 'N/A')
                 row['Humidity'] = sensor.get('humidity', 'N/A')
